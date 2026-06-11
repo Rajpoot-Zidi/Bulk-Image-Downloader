@@ -101,22 +101,24 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Download images and optionally verify SKUs via OCR")
     parser.add_argument('input', nargs='?', default=URL_FILE, help='Input file with URLs (default: image_urls.txt)')
     parser.add_argument('--force', '-f', action='store_true', help='Re-download/process even if target file exists')
+    parser.add_argument('--workers', '-w', type=int, default=8, help='Number of concurrent workers (default: 8)')
     return parser.parse_args()
 
 
 args = parse_args()
 
-with open(args.input, "r", encoding="utf-8") as f:
-    lines = [line.rstrip('\n') for line in f]
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-for line in lines:
+
+def process_entry(session: requests.Session, line: str, force: bool):
     url, expected_code = parse_line(line)
     if not url:
-        continue
+        return
 
     try:
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+        resp = session.get(url, timeout=30)
+        resp.raise_for_status()
+        response = resp
 
         # Determine SKU/name to save: prefer provided expected_code (treated as desired filename),
         # fall back to extraction from URL or the URL's basename.
@@ -131,15 +133,14 @@ for line in lines:
         filepath = os.path.join(OUTPUT_DIR, f"{safe_name}{ext}")
 
         # skip duplicates unless forced
-        if os.path.exists(filepath) and not args.force:
+        if os.path.exists(filepath) and not force:
             print(f"⏩ Skipped (already exists): {os.path.basename(filepath)}")
-            continue
+            return
 
         content = response.content
 
         # No background removal: use original content
         processed_content = content
-        used_png = False
 
         # If OCR is available and an expected code was provided, verify it appears on the image
         if OCR_AVAILABLE and expected_code:
@@ -182,5 +183,30 @@ for line in lines:
 
     except Exception as e:
         print(f"✗ Failed: {url} → {e}")
+
+
+def main():
+    args = parse_args()
+    with open(args.input, "r", encoding="utf-8") as f:
+        lines = [line.rstrip('\n') for line in f]
+
+    # Use a single requests Session for connection pooling
+    session = requests.Session()
+    workers = max(1, args.workers)
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = [ex.submit(process_entry, session, line, args.force) for line in lines]
+        for fut in as_completed(futures):
+            # exceptions are printed in process_entry, but re-raise here if desired
+            try:
+                fut.result()
+            except Exception as e:
+                print('Worker error:', e)
+
+    print("\nDONE 🚀 Clean download complete.")
+
+
+if __name__ == '__main__':
+    main()
 
 print("\nDONE 🚀 Clean download complete.")
