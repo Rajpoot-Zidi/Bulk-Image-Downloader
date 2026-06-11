@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Image Downloader - run by double-click
 
 This project downloads images listed in `image_urls.txt` into the `downloaded_images/` folder using `download_images.py`.
@@ -45,3 +46,6 @@ OCR / Tesseract note:
 If you'd like, I can also produce a fully self-contained bundle that downloads the embeddable Python and (optionally) Tesseract at first-run so the intern only needs to double-click `run.bat`.
 
 <!-- Background removal support removed -->
+=======
+# Bulk-Image-Downloader
+>>>>>>> 8b0e4cb7ed9f670e4265634aafc901d7c2106a24
